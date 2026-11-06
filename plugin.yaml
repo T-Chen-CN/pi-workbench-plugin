@@ -1,0 +1,65 @@
+name: pi-workbench
+label: Pi Workbench
+kind: platform
+version: 0.1.0
+manifest_version: 2
+# Runtime plugin API generation we target (ctx surface / hook signatures).
+# Only `ctx.register_platform` from the v1 surface is used today.
+api_version: 1
+author: Pi Workbench
+license: MIT
+homepage: https://github.com/T-Chen-CN/pi-workbench-plugin
+description: >
+  The only path between Pi Workbench (local) and this Hermes profile.
+
+  Acts as a single seam: device-token auth (one token per machine), per-device
+  scopes (chat / dispatch / admin), rate limiting, audit, and a transparent
+  reverse proxy to the local api_server so that runs, SSE streams, approvals,
+  sessions and config keep working unchanged. The public dashboard is NOT
+  proxied -- it keeps talking to Hermes directly.
+requires_hermes: ">=0.22.6,<0.24"
+python_dependencies: []
+# No `capabilities:` block on purpose: this plugin requests no privileged host
+# surface (no tool override, no ctx.llm, no gateway.platform_actions), so it
+# needs no consent screen. Keep it that way unless one is actually used.
+#
+# No `provides_tools:` block either -- nothing is registered through
+# `ctx.register_tool` yet. When the dispatch tools land, list them here
+# (local_workspaces / local_devices / local_dispatch / local_task): the field is
+# what `hermes plugins validate` checks against what `register()` really
+# registers, and what loads `tools.py` in CLI/TUI sessions for a platform
+# plugin.
+requires_env:
+  # The value belongs in the gateway's systemd unit. Hermes would also accept it
+  # from the profile `.env` (env wins), but the agent can read that file, so we
+  # keep the key out of it on purpose.
+  - name: PI_HUB_ADMIN_KEY
+    description: "Admin key for device registration/revocation (keep it in the gateway systemd unit, not in .env)"
+    prompt: "Pi Workbench hub admin key"
+    password: true
+    secret: true
+optional_env:
+  - name: HERMES_API_BASE
+    description: "Local api_server base URL the hub proxies to (default http://127.0.0.1:8642)."
+    prompt: "Hermes api_server base URL"
+    password: false
+  - name: PI_HUB_PORT
+    description: "Hub listen port (default 8484, loopback only)."
+    prompt: "Pi Workbench hub port"
+    password: false
+  - name: PI_HUB_HOST
+    description: "Hub bind host (default 127.0.0.1; keep loopback and let Caddy terminate TLS)."
+    prompt: "Pi Workbench hub bind host"
+    password: false
+  - name: PI_HUB_RATE_LIMIT
+    description: "Requests per minute per device token (default 60)."
+    prompt: "Hub rate limit (req/min/device)"
+    password: false
+  - name: PI_HUB_DASHBOARD_BASE
+    description: "Dashboard base URL used for the two side-channel calls (default http://127.0.0.1:9119)."
+    prompt: "Hermes dashboard base URL"
+    password: false
+  - name: PI_HUB_FS_ROOTS
+    description: "Extra roots a device token may read media from, ':'-separated (defaults to the profile's upload/cache dirs)."
+    prompt: "Allowed media roots"
+    password: false

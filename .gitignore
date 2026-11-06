@@ -1,0 +1,16 @@
+# Pi Workbench 本地状态目录
+.pi-workbench/
+
+# Python 缓存与虚拟环境（插件是 stdlib-only，不需要任何依赖目录）
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 通用忽略
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
