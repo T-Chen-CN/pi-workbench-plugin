@@ -63,22 +63,27 @@ core/        纯 stdlib，不知道 Hermes 存在 → 能 5 分钟外提成独�
 ## 本地开发
 
 ```bash
-python -m unittest discover -s tests -t . -v     # 102 个用例，约 20 秒，零依赖
+python -m unittest discover -s tests -t . -v     # 103 个用例，约 20 秒，零依赖
 hermes plugins validate .                        # 清单/声明对账（需要装 Hermes）
 ```
 
 ## 部署到 VPS
 
 ```bash
-# 1) 装插件（profile 级，用不可变 SHA 钉版本；公开仓库，不需要任何凭据）
-hermes plugins install https://github.com/T-Chen-CN/pi-workbench-plugin.git --ref <40位SHA>
+export HERMES_HOME=/home/ubuntu/.hermes/profiles/pi-cloud   # 必须指 profile，不是 ~/.hermes
 
-# 过渡期（尚未切成 git 安装）仍可 rsync 整个目录：
-#   rsync -a --delete ./ ubuntu@<服务器地址>:/home/ubuntu/.hermes/profiles/pi-cloud/plugins/pi-workbench/
-# 然后 hermes plugins adopt pi-workbench 让它变成 tracked 安装
+# 1) 装插件（profile 级；公开仓库，不需要任何凭据）
+#    默认装默认分支最新版 —— 不要在这条命令里钉版本，跟版靠下面「跟版」那节的 update
+hermes plugins install https://github.com/T-Chen-CN/pi-workbench-plugin.git
+# 装完记下实际落到的提交（写进交接说明，出问题时能对上是哪一版）：
+git -C "$HERMES_HOME/plugins/pi-workbench" rev-parse HEAD
 
-# 2) 启用（HERMES_HOME 必须指 profile，不是 ~/.hermes）
-export HERMES_HOME=/home/ubuntu/.hermes/profiles/pi-cloud
+# 过渡期（目录是 tar/rsync 铺的、没有 .git）才需要：
+#   cd <profile>/plugins && mv pi-workbench pi-workbench.bak-$(date +%Y%m%d-%H%M)
+#   git clone --depth 1 https://github.com/T-Chen-CN/pi-workbench-plugin.git pi-workbench
+#   hermes plugins adopt pi-workbench      # 读 origin → 写 provenance → 变成 tracked 安装
+
+# 2) 启用
 hermes plugins list | grep pi-workbench
 hermes plugins enable pi-workbench
 
@@ -95,6 +100,26 @@ sudo systemctl reload caddy
 sudo systemctl restart hermes-gateway-pi-cloud.service
 ```
 
+## 跟版（装完之后的日常）
+
+安装时**不钉版本**，取的是默认分支最新；之后跟版也只看本仓库。
+
+```bash
+hermes plugins check-updates          # 只读：有没有新提交
+hermes plugins update pi-workbench    # 更新到默认分支最新
+sudo systemctl restart hermes-gateway-<profile>.service   # 让 gateway 重新加载插件
+sleep 7 && curl -s 127.0.0.1:8484/v1/hub/health           # hub 字段 = plugin.yaml 的 version
+```
+
+- **发版节奏由本仓库决定**，应用仓库不需要跟：自举 Prompt 只注入仓库地址、不钉版本，
+  所以插件发版不会把两个仓库的发布串在一起。
+- 只有要**复现某次部署**（排查「当时到底是哪一版」）才用
+  `--ref <tag 指向的 40 位 SHA>`；CLI 只认完整 SHA，**不认分支名 / tag**。
+- **行为变了就 bump `plugin.yaml` 的 `version`**：`/v1/hub/health` 的 `hub` 字段和
+  `hermes plugins list` 都读它，是「这台机器跑的是哪一版」的唯一人工可读标识；纯文档改动不用 bump。
+- 装完/更新后记一笔 `git -C "$HERMES_HOME/plugins/pi-workbench" rev-parse HEAD`，
+  排查时能对上是哪个提交（默认分支会前进，只有 SHA 是不变的）。
+
 ## 验收（G0）
 
 ```bash
@@ -104,6 +129,11 @@ curl -s -H "Authorization: Bearer pi_…" https://hub.<你的域名>/v1/capabili
 curl -X POST -H "X-Pi-Admin-Key: …" https://hub.<你的域名>/v1/devices/<id>/revoke
 curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer pi_…" .../v1/capabilities  # 401 device_revoked
 ```
+
+上面只是**服务端**冒烟（G0 = 进程起来了、鉴权生效、代理通、撤销即生效）。
+**端到端**的 14 步（对话 / 工具 / 审批三档 / 插话 / 停止 / 跨重启接回 / 图片 / 会话与任务页 /
+两种失败语义 / 注销再登记 / 审计对账）在应用仓库 `docs/guides/AGENT-TESTING.md` 的
+「云端单入口（G1）验收」。
 
 管理密钥在哪、怎么拿、怎么换：见应用仓库 `docs/requirements/CLOUD_AGENT_DEVICES.md` §15.1。
 一句话：`ssh … 'cat <ADMIN_KEY_FILE>'`；只有「登记新设备 / 操作别的设备」需要它，
